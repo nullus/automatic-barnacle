@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 
-from flask import Flask, Response, request
+from flask import Flask, Response, request, render_template, url_for
 from werkzeug.datastructures import Headers
 import os
 
@@ -22,6 +22,7 @@ def video_stream(path):
             return ("", 416)
 
     def chunks(start, length, chunk_size=4096):
+        # FIXME: yes, terrible idea
         with open(path, "rb") as streamfile:
             streamfile.seek(start)
             while length > 0:
@@ -55,14 +56,9 @@ def video_stream(path):
 
 @app.route("/play/<path:path>")
 def video_player(path):
-    player_template = """
-<!DOCTYPE html>
-<html>
-<head>
-<title>Test</title>
-</head>
-<body>
-<video id="sampleMovie" src="/video/{0}" type="video/mp4" controls></video>
-</body>
-"""
-    return player_template.format(path)
+    return render_template('play.html', path=path)
+
+@app.route("/")
+def get_index():
+    files = [{"url": url_for('video_player', path=file), "name": file} for file in os.walk(os.getcwd()).next()[2]]
+    return render_template('index.html', files=files)
