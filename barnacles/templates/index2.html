@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html>
+<head>
+	<title>The new thing</title>
+	<script type="text/javascript">
+	function a_href(href, child_node) {
+		var elem = document.createElement("a");
+		var attr = document.createAttribute("href");
+		attr.value = href;
+		elem.setAttributeNode(attr);
+		elem.appendChild(child_node);
+		return elem;
+	}
+	function node(type, child_node) {
+		var elem = document.createElement(type);
+		if (Object.prototype.toString.call(child_node) === '[object Array]') {
+			child_node.forEach(function (item, index, array) {
+				elem.appendChild(item);
+			})
+		} else {
+			elem.appendChild(child_node);
+		}
+		return elem;
+	}
+	function makeTheList() {
+
+	}
+
+	function updateMediaList(elementId, media) {
+		var elem = document.getElementById(elementId);
+		var list = document.createElement("ul")
+		elem.innerHTML = "";
+
+		elem.appendChild(node("ul",
+			media["elements"].map(function (currentValue, index, array) {
+				return node("li",
+						a_href(currentValue["url"], document.createTextNode(currentValue["name"]))
+					)
+				})
+			)
+		);
+	}
+
+	function getMediaData(apiUrl, update) {
+		var req = new XMLHttpRequest();
+		req.open("GET", apiUrl, true);
+		req.responseType = "json"
+		req.onreadystatechange = function () {
+			if (req.readyState === XMLHttpRequest.DONE && req.status === 200) {
+				update(req.response)
+			}
+		}
+		req.send()
+	}
+
+	window.onload = function() {
+		console.log("onload");
+		getMediaData("/v1",
+			function (list) {
+				updateMediaList("loadList", list);
+			}
+		);
+	}
+	</script>
+</head>
+<body>
+<div id="loadList">
+Some loading element...
+</div>
+</body>
+</html>
