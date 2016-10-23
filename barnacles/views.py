@@ -60,5 +60,5 @@ def video_player(path):
 
 @app.route("/")
 def get_index():
-    return render_template('index2.html')
+    return render_template('index.html')
 

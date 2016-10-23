@@ -22,15 +22,11 @@
 		}
 		return elem;
 	}
-	function makeTheList() {
-
-	}
 
 	function updateMediaList(elementId, media) {
 		var elem = document.getElementById(elementId);
 		var list = document.createElement("ul")
 		elem.innerHTML = "";
-
 		elem.appendChild(node("ul",
 			media["elements"].map(function (currentValue, index, array) {
 				return node("li",
