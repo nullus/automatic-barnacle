@@ -1,8 +1,6 @@
 #!/usr/bin/env python
 
-from flask import Flask, Response, request, render_template, url_for
-from werkzeug.datastructures import Headers
-import os
+from flask import Flask
 
 app = Flask(__name__)
 
