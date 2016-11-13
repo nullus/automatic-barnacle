@@ -1,6 +1,6 @@
 
-from barnacles import app, url_for
-from flask import jsonify
+from barnacles import app
+from flask import jsonify, url_for
 
 import barnacles.data
 
