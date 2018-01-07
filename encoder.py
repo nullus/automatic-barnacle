@@ -83,14 +83,13 @@ class RarTempVideoReader(VideoReader):
     def __call__(self):
         # This does seem a bit bogus
         try:
-            with tempfile.NamedTemporaryFile(mode='w+b') as temp_file, self.rarfile.open(self.video_filename()) as video_file:
+            with tempfile.NamedTemporaryFile(mode='w+b', delete=False) as temp_file, self.rarfile.open(self.video_filename()) as video_file:
                 self.temp_filename = temp_file.name
                 for block in iter(functools.partial(video_file.read, 65536), ''):
                     temp_file.write(block)
-                temp_file.seek(0)
-                yield temp_file
+            yield self.temp_filename
         finally:
-            pass
+            os.unlink(self.temp_filename)
 
     def video_filename(self):
         for info in self.rarfile.infolist():
