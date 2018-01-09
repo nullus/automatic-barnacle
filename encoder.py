@@ -1,17 +1,25 @@
 #!/usr/bin/env python
 
 """
-Process rarfile containing video and transcode to iPhone compatible AVC/H.264
+Process file containing video and transcode to iPhone compatible AVC/H.264
 """
 
 from argparse import ArgumentParser
 from contextlib import contextmanager
 import functools
+import logging
 import rarfile
 import subprocess
 from pprint import pprint
 import os
 import tempfile
+
+
+# TODO: 
+# Refactor VideoReader/Encoder to only use on-disk files
+# Create 
+
+LOG = logging.getLogger(__name__)
 
 
 class VideoReader(object):
@@ -23,9 +31,6 @@ class VideoReader(object):
 
     def video_filename(self):
         raise NotImplementedError
-
-    def is_stream(self):
-        return True
 
     @classmethod
     def create(cls, filename, *args, **kwargs):
@@ -48,48 +53,39 @@ class VideoReader(object):
         ]
         return filename.lower().split('.')[-1] in video_file_extensions    
 
+    def input_args(self):
+        return []
+
 
 class FileVideoReader(VideoReader):
     def __init__(self, filename):
         self.filename = filename
 
+    @contextmanager
     def __call__(self):
-        return open(self.filename, mode='rb')
+        # return open(self.filename, mode='rb')
+        yield self.filename
 
     def video_filename(self):
         return self.filename
 
 
-class RarVideoReader(VideoReader):
-    def __init__(self, filename):
-        self.rarfile = rarfile.RarFile(filename)
-
-    def __call__(self):
-        return self.rarfile.open(self.video_filename())
-
-    def video_filename(self):
-        for info in self.rarfile.infolist():
-            if self.is_video_filename(info.filename):
-                return info.filename
-        raise ValueError('no video file found')
-
-
 class RarTempVideoReader(VideoReader):
     def __init__(self, filename):
         self.rarfile = rarfile.RarFile(filename)
-        self.temp_filename = None
 
     @contextmanager
     def __call__(self):
-        # This does seem a bit bogus
+        tempfile_name = None
         try:
             with tempfile.NamedTemporaryFile(mode='w+b', delete=False) as temp_file, self.rarfile.open(self.video_filename()) as video_file:
-                self.temp_filename = temp_file.name
                 for block in iter(functools.partial(video_file.read, 65536), ''):
                     temp_file.write(block)
-            yield self.temp_filename
+                tempfile_name = temp_file.name
+            # Yield outside the context manager, because Windows concurrent file access 
+            yield tempfile_name
         finally:
-            os.unlink(self.temp_filename)
+            os.unlink(tempfile_name)
 
     def video_filename(self):
         for info in self.rarfile.infolist():
@@ -97,11 +93,41 @@ class RarTempVideoReader(VideoReader):
                 return info.filename
         raise ValueError('no video file found')
 
-    def input_filename(self):
-        return self.temp_filename
 
-    def is_stream(self):
-        return False
+@contextmanager
+def context_list(r):
+    if len(r) == 0:
+        yield []
+    else:
+        with r[0]() as head, context_list(r[1:]) as tail:
+            yield [head] + tail
+
+
+class ConcatVideoReader(VideoReader):
+    def __init__(self, filenames):
+        self.readers = [VideoReader.create(i) for i in filenames]
+
+    @contextmanager
+    def __call__(self):
+        tempfile_name = None
+        try:
+            with context_list(self.readers) as filenames:
+                with tempfile.NamedTemporaryFile(mode='w+b', delete=False) as temp_file:
+                    for filename in filenames:
+                        temp_file.write("file '{0}'\n".format(filename))
+                    tempfile_name = temp_file.name
+                # Yield outside the context manager, because Windows concurrent file access 
+                yield tempfile_name
+        except:
+            LOG.exception("Failed ConcatVideoReader")
+        finally:
+            os.unlink(tempfile_name)
+
+    def input_args(self):
+        return ['-f', 'concat', '-safe', '0']
+
+    def video_filename(self):
+        return self.readers[0].video_filename()
 
 
 class VideoEncoder(object):
@@ -119,47 +145,72 @@ class VideoEncoder(object):
         '-movflags', '+faststart'
     ]
 
-    def __init__(self, reader, output, scale=None):
+    def __init__(self, reader, output, scale=None, extra_ffmpeg_args=None):
         self.reader = reader
         self.output = output
-        self.extra_ffmpeg_args = []
+        self.extra_ffmpeg_args = extra_ffmpeg_args if extra_ffmpeg_args is not None else []
         if scale:
             self.extra_ffmpeg_args += ['-vf', 'scale=' + scale]
 
-    def output_filename(self):
-        video_filename = '.'.join(os.path.basename(self.reader.video_filename()).split('.')[:-1]) + '.mp4'
-        return os.path.join(self.output, video_filename)
-
-    def encoding_command(self):
-        return (
-            [self.FFMPEG_EXE, '-i', self.reader.input_filename() if not self.reader.is_stream() else '-'] + 
-            self.FFMPEG_ARGS + 
-            self.extra_ffmpeg_args +
-            [self.output_filename()]
-        )
-
     def encode(self):
-        if self.reader.is_stream():
-            with self.reader() as infile:
-                process = subprocess.Popen(self.encoding_command(), stdin=subprocess.PIPE)
-                for block in iter(functools.partial(infile.read, 65536), ''):
-                    process.stdin.write(block)
-                process.stdin.close()
-            return process.wait()
-        else:
-            with self.reader() as infile:
-                subprocess.check_call(self.encoding_command())
+         with self.reader() as infile:
+            subprocess.check_call(
+                [self.FFMPEG_EXE] + 
+                self.reader.input_args() + 
+                ['-i', infile] + 
+                self.FFMPEG_ARGS + 
+                self.extra_ffmpeg_args +
+                [self.output])
 
+
+class VideoFileConverter(object):
+    def __init__(self, input_filenames, output_pathname, **kwargs):
+        self.input_filenames = input_filenames
+        self.output_pathname = output_pathname
+        self.additional_arguments = kwargs
+
+    def convert(self):
+        for input_file, output_file in zip(self.input_files, self._output_filenames()):
+            print input_file, output_file
+            VideoEncoder(input_file, output_file, self.additional_arguments.get('scale')).encode()
+
+    def _output_filenames(self):
+        for input_file in self.input_files:
+            basename = os.path.basename(input_file.video_filename())
+            yield os.path.join(self.output_pathname, basename[:basename.rindex('.')] + '.mp4')
+
+    @property
+    def input_files(self):
+        raise NotImplementedError()
+
+
+class SingleVideoFileConverter(VideoFileConverter):
+    @property
+    def input_files(self):
+        return [VideoReader.create(i) for i in self.input_filenames]
+
+
+class ConcatVideoFileConverter(VideoFileConverter):
+    @property
+    def input_files(self):
+        return [ConcatVideoReader(self.input_filenames)]
+    
 
 def main():
+    logging.basicConfig()
+
     parser = ArgumentParser(description=__doc__)
     parser.add_argument('input', nargs='+', help="Input files")
     parser.add_argument('-o', '--output', required=True, help="Output path")
     parser.add_argument('-s', '--scale')
+    parser.add_argument('-c', '--concat', action='store_true', default=False)
     args = parser.parse_args()
     
-    for input_filename in args.input:
-        VideoEncoder(VideoReader.create(input_filename), args.output, scale=args.scale).encode()
+    if not args.concat:
+        SingleVideoFileConverter(args.input, args.output, scale=args.scale).convert()
+    else:
+        ConcatVideoFileConverter(args.input, args.output, scale=args.scale).convert()
+
 
 if __name__ == "__main__":
     main()
