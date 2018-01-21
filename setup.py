@@ -2,12 +2,15 @@ from setuptools import setup, find_packages
 
 setup(
     name = 'barnacles',
-    version = '1.0.2',
+    version = '1.1.1',
     packages = find_packages(),
-    requires = [
+    install_requires = [
         "flask",
         "rarfile",
         "sqlalchemy",
         "alembic",
     ],
+    package_data = {
+        '': ['templates/*.html'],
+    },
 )
