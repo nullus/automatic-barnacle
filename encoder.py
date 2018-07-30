@@ -10,7 +10,6 @@ import functools
 import logging
 import rarfile
 import subprocess
-from pprint import pprint
 import os
 import tempfile
 
@@ -79,9 +78,9 @@ class RarTempVideoReader(VideoReader):
         tempfile_name = None
         try:
             with tempfile.NamedTemporaryFile(mode='w+b', delete=False) as temp_file, self.rarfile.open(self.video_filename()) as video_file:
-                for block in iter(functools.partial(video_file.read, 65536), ''):
-                    temp_file.write(block)
                 tempfile_name = temp_file.name
+                for block in iter(functools.partial(video_file.read, 65536), b''):
+                    temp_file.write(block)
             # Yield outside the context manager, because Windows concurrent file access 
             yield tempfile_name
         finally:
@@ -112,7 +111,7 @@ class ConcatVideoReader(VideoReader):
         tempfile_name = None
         try:
             with context_list(self.readers) as filenames:
-                with tempfile.NamedTemporaryFile(mode='w+b', delete=False) as temp_file:
+                with tempfile.NamedTemporaryFile(mode='w', delete=False) as temp_file:
                     for filename in filenames:
                         temp_file.write("file '{0}'\n".format(filename))
                     tempfile_name = temp_file.name
@@ -131,7 +130,8 @@ class ConcatVideoReader(VideoReader):
 
 
 class VideoEncoder(object):
-    FFMPEG_EXE = 'C:\\Users\\test\\Desktop\\ffmpeg\\bin\\ffmpeg.exe'
+    # FFMPEG_EXE = 'C:\\Users\\test\\Desktop\\ffmpeg\\bin\\ffmpeg.exe'
+    FFMPEG_EXE = 'ffmpeg'
 
     FFMPEG_ARGS = [
         '-f', 'mp4',
@@ -171,7 +171,6 @@ class VideoFileConverter(object):
 
     def convert(self):
         for input_file, output_file in zip(self.input_files, self._output_filenames()):
-            print input_file, output_file
             VideoEncoder(input_file, output_file, self.additional_arguments.get('scale')).encode()
 
     def _output_filenames(self):
