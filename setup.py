@@ -13,4 +13,7 @@ setup(
     package_data = {
         '': ['templates/*.html'],
     },
+    extras_require = {
+        'test': 'waitress',
+    }
 )
