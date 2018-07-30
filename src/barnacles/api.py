@@ -4,6 +4,7 @@ from flask import jsonify, url_for
 
 import barnacles.data
 
+
 @app.route("/v1")
 def api_base():
     return jsonify(

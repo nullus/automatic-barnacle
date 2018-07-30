@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 
 import os
-import sys
+
 
 def get_files():
     return [
@@ -10,4 +10,3 @@ def get_files():
         for i in walk[2]
         if i.lower().endswith('.mp4') or i.lower().endswith('.m4v')
     ]
-
