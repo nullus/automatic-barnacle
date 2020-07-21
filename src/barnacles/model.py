@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String
+from sqlalchemy import Column, Integer, String, Binary, Text
 from sqlalchemy.ext.declarative import declarative_base, declared_attr
 
 Base = declarative_base()
@@ -33,3 +33,8 @@ class VideoTags(Base, TablePrefix, SurrogateKeyId):
 class Video(Base, TablePrefix, SurrogateKeyId):
     uuid = Column(String(36), unique=True, nullable=False)
     path = Column(String(260), nullable=False)
+
+
+class MediaItem(Base, TablePrefix, SurrogateKeyId):
+    hash = Column(Binary(32), unique=True, nullable=False)
+    path = Column(Text(), nullable=False)
